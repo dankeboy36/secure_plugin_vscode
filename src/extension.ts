@@ -20,6 +20,7 @@ import * as vscode from 'vscode';
 import type { Terminal, Pseudoterminal, ExtensionTerminalOptions } from 'vscode';
 import type { ArduinoContext, BoardDetails } from 'vscode-arduino-api';
 import * as path from 'path';
+import { promises as fs } from 'node:fs';
 import { spawn } from 'child_process';
 
 
@@ -39,9 +40,53 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 	context.subscriptions.push(
-		vscode.commands.registerCommand('teensysecurity.step1', () => {
+		vscode.commands.registerCommand('teensysecurity.step1', async () => {
+			const { userDirPath } = acontext;
+			if (!userDirPath) {
+				return;
+			}
 			console.log('teensysecurity.step1 (Fuse Write Sketch) callback');
-			// TODO...
+			// I used the sketchbook path here, but it can be relative to current sketch, or in the temp folder.
+			// It's just an example.
+			const newBasename = await vscode.window.showInputBox({
+				placeHolder: 'New Fuse sketch folder name',
+				async validateInput(value) {
+					try {
+						await fs.readdir(path.join(userDirPath, value));
+						// when reading the directory is OK, the sketch folder already exists
+						return 'The sketch already exists';
+					} catch (err) {
+						if (err instanceof Error  && 'code' in err && err.code === 'ENOENT') {
+							// Ignore all ENOENT errors (https://nodejs.org/api/errors.html)
+						} else {
+							throw err;
+						}
+						// all errors considered 
+					}
+					// TODO: validate the sketch folder name (https://arduino.github.io/arduino-cli/1.0/sketch-specification/#sketch-folders-and-files)
+					if (value === 'alma') {
+						return 'alma is reserved'; // return any string to show as an error
+					}
+					return undefined; // no error otherwise
+				},
+			});
+			if (!newBasename) {
+				return;
+			}
+			const newSketchFolderPath = path.join(userDirPath, newBasename);
+			await fs.mkdir(newSketchFolderPath, { recursive: true });
+			await fs.writeFile(path.join(newSketchFolderPath, `${newBasename}.ino`), `
+// Generated with teensysecurity (${new Date().toISOString()})
+
+void setup() {}
+void loop() {}
+`, { encoding: 'utf8' });
+			// VS Code APIs use URI instead of raw file-system path strings
+			const newSketchFolderUri = vscode.Uri.file(newSketchFolderPath);
+			// See all built-in VS Code commands: https://code.visualstudio.com/api/references/commands
+			// Theia supports a few of them https://github.com/eclipse-theia/theia/blob/363865fd7ecea164eb134f491e95a4005ba6df0d/packages/plugin-ext-vscode/src/browser/plugin-vscode-commands-contribution.ts#L292-L293
+			vscode.commands.executeCommand('vscode.openFolder', newSketchFolderUri, { forceNewWindow: true });
+			return undefined;
 		})
 	);
 	context.subscriptions.push(
