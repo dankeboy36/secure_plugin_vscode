@@ -20,11 +20,8 @@ import * as vscode from 'vscode';
 import type { Terminal, Pseudoterminal, ExtensionTerminalOptions } from 'vscode';
 import type { ArduinoContext, BoardDetails } from 'vscode-arduino-api';
 import * as path from 'path';
-import { promises as fs } from 'node:fs';
-import { spawn } from 'child_process';
-
-import { mkdtempSync, mkdirSync } from 'node:fs';
-//import { join } from 'node:path';
+import * as fs from 'node:fs';
+import * as child_process from 'child_process';
 import { tmpdir } from 'node:os';
 
 
@@ -39,27 +36,32 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 	context.subscriptions.push(
 		vscode.commands.registerCommand('teensysecurity.createkey', () => {
-			//vscode.window.showInformationMessage('Hello World');
-			createkey(acontext);
+			createKey(acontext);
 		})
 	);
 	context.subscriptions.push(
 		vscode.commands.registerCommand('teensysecurity.step1', async () => {
 			console.log('teensysecurity.step1 (Fuse Write Sketch) callback');
-			createsketch(acontext, "hello");
-			// TODO...
+			var mydir = createTempFolder("FuseWrite");
+			makeCode(acontext, "fuseino", path.join(mydir, "FuseWrite.ino"));
+			makeCode(acontext, "testdataino", path.join(mydir, "testdata.ino"));
+			openSketch(mydir);
 		})
 	);
 	context.subscriptions.push(
-		vscode.commands.registerCommand('teensysecurity.step2', () => {
+		vscode.commands.registerCommand('teensysecurity.step2', async () => {
 			console.log('teensysecurity.step2 (Verify Sketch) callback');
-			// TODO...
+			var mydir = createTempFolder("VerifySecure");
+			makeCode(acontext, "verifyino", path.join(mydir, "VerifySecure.ino"));
+			openSketch(mydir);
 		})
 	);
 	context.subscriptions.push(
-		vscode.commands.registerCommand('teensysecurity.step3', () => {
+		vscode.commands.registerCommand('teensysecurity.step3', async () => {
 			console.log('teensysecurity.step3 (Lock Security Sketch) callback');
-			// TODO...
+			var mydir = createTempFolder("LockSecureMode");
+			makeCode(acontext, "lockino", path.join(mydir, "LockSecureMode.ino"));
+			openSketch(mydir);
 		})
 	);
 	/*  not working, but why???
@@ -74,22 +76,36 @@ export function activate(context: vscode.ExtensionContext) {
 	console.log('extension "teensysecurity" is now active!');
 }
 
-async function createsketch(acontext: ArduinoContext, sketchname: string) {
-
-	var mytmpdir:string = mkdtempSync(path.join(tmpdir(), 'teensysecure-'));
-	console.log("temporary directory: " + mytmpdir);
+function createTempFolder(sketchname: string) : string {
+	var mytmpdir = fs.mkdtempSync(path.join(tmpdir(), 'teensysecure-'));
 	var mydir:string = path.join(mytmpdir, sketchname);
 	console.log("temporary sketch directory: " + mydir);
-	mkdirSync(mydir);
-
-	const uri = vscode.Uri.file("/tmp/hello");
-	vscode.commands.executeCommand('vscode.openFolder', uri , { forceNewWindow: true });
-
-
+	fs.mkdirSync(mydir);
+	return mydir;
 }
 
-async function createkey(acontext: ArduinoContext) {
-	console.log('createkey:');
+function makeCode(acontext: ArduinoContext, operation: string, pathname: string) : boolean {
+	var keyfile = keyfilename(acontext);
+	if (!keyfile) return false;
+	var program = programpath(acontext);
+	if (!program) return false;
+	// https://stackoverflow.com/questions/14332721
+	var child = child_process.spawnSync(program, [operation, keyfile]);
+	if (child.error) return false;
+	if (child.status != 0) return false;
+	if (child.stdout.length <= 0) return false;
+	fs.writeFileSync(pathname, child.stdout);
+	return true;
+}
+
+async function openSketch(sketchpath: string) {
+	// Thanks to dankeboy36
+	// https://github.com/dankeboy36/vscode-arduino-api/discussions/16
+	const uri = vscode.Uri.file(sketchpath);
+	vscode.commands.executeCommand('vscode.openFolder', uri , { forceNewWindow: true });
+}
+
+async function createKey(acontext: ArduinoContext) {
 	var keyfile = keyfilename(acontext);
 	if (!keyfile) return;
 
@@ -123,7 +139,6 @@ async function createkey(acontext: ArduinoContext) {
 	// start teensy_secure running with keygen
 	var program = programpath(acontext);
 	if (!program) return undefined;
-	var child_process = require('child_process');
 	var child = child_process.spawn(program, ['keygen', keyfile]);
 
 	// as stdout and stderr arrive, send to the terminal
@@ -135,7 +150,7 @@ async function createkey(acontext: ArduinoContext) {
 	});
 
 	//we're done here, but teensy_secure keygen and terminal keeps running
-	//console.log('createkey: end');
+	//console.log('createKey: end');
 }
 
 function programpath(acontext: ArduinoContext) : string | undefined {
@@ -148,7 +163,6 @@ function keyfilename(acontext: ArduinoContext) : string | undefined {
 	var program = programpath(acontext);
 	if (!program) return undefined;
 	// https://stackoverflow.com/questions/14332721
-	var child_process = require('child_process');
 	var child = child_process.spawnSync(program, ['keyfile']);
 	if (child.error) return undefined;
 	if (child.status != 0) return undefined;
