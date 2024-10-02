@@ -23,6 +23,9 @@ import * as path from 'path';
 import { promises as fs } from 'node:fs';
 import { spawn } from 'child_process';
 
+import { mkdtempSync, mkdirSync } from 'node:fs';
+//import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 
 export function activate(context: vscode.ExtensionContext) {
@@ -72,6 +75,12 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 async function createsketch(acontext: ArduinoContext, sketchname: string) {
+
+	var mytmpdir:string = mkdtempSync(path.join(tmpdir(), 'teensysecure-'));
+	console.log("temporary directory: " + mytmpdir);
+	var mydir:string = path.join(mytmpdir, sketchname);
+	console.log("temporary sketch directory: " + mydir);
+	mkdirSync(mydir);
 
 	const uri = vscode.Uri.file("/tmp/hello");
 	vscode.commands.executeCommand('vscode.openFolder', uri , { forceNewWindow: true });
