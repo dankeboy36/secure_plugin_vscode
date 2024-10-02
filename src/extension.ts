@@ -1,3 +1,5 @@
+// MIT License, see LICENSE.md
+
 // https://github.com/arduino/arduino-ide/issues/58
 // https://www.npmjs.com/package/vscode-arduino-api
 // https://github.com/dankeboy36/vscode-arduino-api
@@ -10,8 +12,13 @@
 // yo code     <-- create skeleton hello world (place in ~/.arduinoIDE/plugins/helloworld)
 // npm run compile
 
+// Usage in Arduino IDE 2:
+
 // Ctrl-Shift-P  Reload Window
-// Ctrl-Shift-P  Hello World
+// Ctrl-Shift-P  Teensy Security: Generate Key
+// Ctrl-Shift-P  Teensy Security: Step 1 - Fuse Write Sketch
+// Ctrl-Shift-P  Teensy Security: Step 2 - Verify Sketch
+// Ctrl-Shift-P  Teensy Security: Step 3 - Lock Security Sketch
 
 // https://www.svgrepo.com/svg/34405/key
 
@@ -192,4 +199,5 @@ function findTool(ctx: ArduinoContext, match : string) : string | undefined {
 
 
 // This method is called when your extension is deactivated
+//  TODO: should keep a list of all files create and delete them here
 export function deactivate() {}
