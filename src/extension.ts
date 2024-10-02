@@ -20,7 +20,9 @@ import * as vscode from 'vscode';
 import type { Terminal, Pseudoterminal, ExtensionTerminalOptions } from 'vscode';
 import type { ArduinoContext, BoardDetails } from 'vscode-arduino-api';
 import * as path from 'path';
+import { promises as fs } from 'node:fs';
 import { spawn } from 'child_process';
+
 
 
 export function activate(context: vscode.ExtensionContext) {
@@ -39,8 +41,9 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 	context.subscriptions.push(
-		vscode.commands.registerCommand('teensysecurity.step1', () => {
+		vscode.commands.registerCommand('teensysecurity.step1', async () => {
 			console.log('teensysecurity.step1 (Fuse Write Sketch) callback');
+			createsketch(acontext, "hello");
 			// TODO...
 		})
 	);
@@ -66,6 +69,14 @@ export function activate(context: vscode.ExtensionContext) {
 	//if (x.boardDetails !== undefined) {
 
 	console.log('extension "teensysecurity" is now active!');
+}
+
+async function createsketch(acontext: ArduinoContext, sketchname: string) {
+
+	const uri = vscode.Uri.file("/tmp/hello");
+	vscode.commands.executeCommand('vscode.openFolder', uri , { forceNewWindow: true });
+
+
 }
 
 async function createkey(acontext: ArduinoContext) {
