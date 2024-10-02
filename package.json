@@ -29,16 +29,7 @@
         "command": "teensysecurity.step3",
         "title": "Teensy Security: Step 3 - Lock Security Sketch"
       }
-    ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "teensy-security-gui",
-          "title": "Teensy Security",
-          "icon": "img/key-svgrepo-com.svg"
-        }
-      ]
-    }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
