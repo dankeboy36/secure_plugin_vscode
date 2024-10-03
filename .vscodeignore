@@ -1,0 +1,21 @@
+.vscode/**
+.vscode-test/**
+out/**
+node_modules/**
+src/**
+.gitignore
+webpack.config.js
+vsc-extension-quickstart.md
+**/tsconfig.json
+**/eslint.config.mjs
+**/*.map
+**/*.ts
+test-resources/**
+.prettier*
+.github/**
+images/**
+# remove this entry when package.json.old is not in the repo
+package.json.old
+# instead of this hack, consider creating two folders, one for static images (GH readme, etc) and one for runtime images such as the SVG for the future view
+img
+!img/key-svgrepo-com.svg
