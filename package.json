@@ -9,6 +9,10 @@
   "categories": [
     "Other"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PaulStoffregen/secure_plugin_vscode.git"
+  },
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
