@@ -22,6 +22,10 @@
         "title": "Teensy Security: Generate Key"
       },
       {
+        "command": "teensysecurity.showkeypath",
+        "title": "Teensy Security: Show Key Location"
+      },
+      {
         "command": "teensysecurity.step1",
         "title": "Teensy Security: Step 1 - Fuse Write Sketch"
       },

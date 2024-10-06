@@ -43,31 +43,59 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 	context.subscriptions.push(
 		vscode.commands.registerCommand('teensysecurity.createkey', () => {
-			createKey(acontext);
+			var program = programpath(acontext);
+			if (!program) return;
+			var keyfile = keyfilename(program);
+			if (!keyfile) return;
+			createKey(program, keyfile);
+		})
+	);
+	context.subscriptions.push(
+		vscode.commands.registerCommand('teensysecurity.showkeypath', () => {
+			var program = programpath(acontext);
+			if (!program) return;
+			var keyfile = keyfilename(program);
+			if (!keyfile) return;
+			vscode.window.showInformationMessage('key.pem location: ' + keyfile);
 		})
 	);
 	context.subscriptions.push(
 		vscode.commands.registerCommand('teensysecurity.step1', async () => {
+			var program = programpath(acontext);
+			if (!program) return;
+			var keyfile = keyfilename(program);
+			if (!keyfile) return;
+			if (!keyfileexists(keyfile)) return;
 			console.log('teensysecurity.step1 (Fuse Write Sketch) callback');
 			var mydir = createTempFolder("FuseWrite");
-			makeCode(acontext, "fuseino", path.join(mydir, "FuseWrite.ino"));
-			makeCode(acontext, "testdataino", path.join(mydir, "testdata.ino"));
+			makeCode(program, keyfile, "fuseino", path.join(mydir, "FuseWrite.ino"));
+			makeCode(program, keyfile, "testdataino", path.join(mydir, "testdata.ino"));
 			openSketch(mydir);
 		})
 	);
 	context.subscriptions.push(
 		vscode.commands.registerCommand('teensysecurity.step2', async () => {
 			console.log('teensysecurity.step2 (Verify Sketch) callback');
+			var program = programpath(acontext);
+			if (!program) return;
+			var keyfile = keyfilename(program);
+			if (!keyfile) return;
+			if (!keyfileexists(keyfile)) return;
 			var mydir = createTempFolder("VerifySecure");
-			makeCode(acontext, "verifyino", path.join(mydir, "VerifySecure.ino"));
+			makeCode(program, keyfile, "verifyino", path.join(mydir, "VerifySecure.ino"));
 			openSketch(mydir);
 		})
 	);
 	context.subscriptions.push(
 		vscode.commands.registerCommand('teensysecurity.step3', async () => {
 			console.log('teensysecurity.step3 (Lock Security Sketch) callback');
+			var program = programpath(acontext);
+			if (!program) return;
+			var keyfile = keyfilename(program);
+			if (!keyfile) return;
+			if (!keyfileexists(keyfile)) return;
 			var mydir = createTempFolder("LockSecureMode");
-			makeCode(acontext, "lockino", path.join(mydir, "LockSecureMode.ino"));
+			makeCode(program, keyfile, "lockino", path.join(mydir, "LockSecureMode.ino"));
 			openSketch(mydir);
 		})
 	);
@@ -91,11 +119,7 @@ function createTempFolder(sketchname: string) : string {
 	return mydir;
 }
 
-function makeCode(acontext: ArduinoContext, operation: string, pathname: string) : boolean {
-	var keyfile = keyfilename(acontext);
-	if (!keyfile) return false;
-	var program = programpath(acontext);
-	if (!program) return false;
+function makeCode(program: string, keyfile: string, operation: string, pathname: string) : boolean {
 	// https://stackoverflow.com/questions/14332721
 	var child = child_process.spawnSync(program, [operation, keyfile]);
 	if (child.error) return false;
@@ -112,10 +136,7 @@ async function openSketch(sketchpath: string) {
 	vscode.commands.executeCommand('vscode.openFolder', uri , { forceNewWindow: true });
 }
 
-async function createKey(acontext: ArduinoContext) {
-	var keyfile = keyfilename(acontext);
-	if (!keyfile) return;
-
+async function createKey(program: string, keyfile: string) {
 	// create a function to print to the terminal (EventEmitter so non-intuitive)
 	// https://code.visualstudio.com/api/references/vscode-api#EventEmitter&lt;T&gt;
 	var wevent = new vscode.EventEmitter<string>();
@@ -144,8 +165,6 @@ async function createKey(acontext: ArduinoContext) {
 	term.show();
 
 	// start teensy_secure running with keygen
-	var program = programpath(acontext);
-	if (!program) return undefined;
 	var child = child_process.spawn(program, ['keygen', keyfile]);
 
 	// as stdout and stderr arrive, send to the terminal
@@ -160,26 +179,44 @@ async function createKey(acontext: ArduinoContext) {
 	//console.log('createKey: end');
 }
 
+// return the full pathname of the teensy_secure utility
+//   calling functions should NOT store this, only use if for immediate needs
+//   if Boards Manager is used to upgrade, downgrade or uninstall Teensy,
+//   this pathname can be expected to change or even become undefined
 function programpath(acontext: ArduinoContext) : string | undefined {
 	var tool = findTool(acontext, "runtime.tools.teensy-tools");
-	if (!tool) return undefined;
-	return tool + path.sep + 'teensy_secure';
+	if (!tool) {
+		vscode.window.showErrorMessage("Could not find teensy_secure utility.  Please use Boards Manager to install Teensy.");
+		return undefined;
+	}
+	return path.join(tool, 'teensy_secure');
+	//return tool + path.sep + 'teensy_secure';
 }
 
-function keyfilename(acontext: ArduinoContext) : string | undefined {
-	var program = programpath(acontext);
-	if (!program) return undefined;
+// get the full path to the user's key.pem file
+//   calling functions should NOT store this, only use if for immediate needs
+//   teensy_secure can look for key.pem in multiple locations and choose which
+//   to use based on its internal rules.  If the user moves or deletes their
+//   key.pem files, which file teensy_secure uses may change.
+function keyfilename(program: string) : string | undefined {
 	// https://stackoverflow.com/questions/14332721
 	var child = child_process.spawnSync(program, ['keyfile']);
 	if (child.error) return undefined;
-	if (child.status != 0) return undefined;
+	if (child.status != 0) {
+		vscode.window.showErrorMessage("Found old version of teensy_secure utility.  Please use Boards Manager to install Teensy 1.60.0 or later.");
+		return undefined;
+	}
 	if (child.stdout.length <= 0) return undefined;
 	var out:string = child.stdout.toString();
 	var out2:string = out.replace(/\s+$/gm,''); // remove trailing newline
 	return out2;
 }
 
-
+function keyfileexists(keyfile: string) : boolean {
+	if (fs.existsSync(keyfile)) return true;
+	vscode.window.showErrorMessage('This command requires a key.pem file (' + keyfile + ').  Please use "Teensy Security: Generate Key" to create your key.pem file.');
+	return false;
+}
 
 // from arduino-littlefs-upload
 function findTool(ctx: ArduinoContext, match : string) : string | undefined {
