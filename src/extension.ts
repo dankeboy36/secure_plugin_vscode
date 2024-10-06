@@ -29,7 +29,7 @@ import type { ArduinoContext, BoardDetails } from 'vscode-arduino-api';
 import * as path from 'path';
 import * as fs from 'node:fs';
 import * as child_process from 'child_process';
-import { tmpdir } from 'node:os';
+import { tmpdir, platform } from 'node:os';
 
 
 export function activate(context: vscode.ExtensionContext) {
@@ -189,8 +189,9 @@ function programpath(acontext: ArduinoContext) : string | undefined {
 		vscode.window.showErrorMessage("Could not find teensy_secure utility.  Please use Boards Manager to install Teensy.");
 		return undefined;
 	}
-	return path.join(tool, 'teensy_secure');
-	//return tool + path.sep + 'teensy_secure';
+	var filename = 'teensy_secure';
+	if (platform() === 'win32') filename += '.exe';
+	return path.join(tool, filename);
 }
 
 // get the full path to the user's key.pem file
