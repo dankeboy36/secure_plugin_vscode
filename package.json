@@ -13,29 +13,59 @@
     "type": "git",
     "url": "https://github.com/PaulStoffregen/secure_plugin_vscode.git"
   },
-  "activationEvents": [],
+  "activationEvents": [
+    "onView:teensysecurity.setupView"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "teensysecurity.createkey",
-        "title": "Teensy Security: Generate Key"
+        "command": "teensysecurity.createKey",
+        "title": "Generate Key",
+        "category": "Teensy Security"
       },
       {
-        "command": "teensysecurity.showkeypath",
-        "title": "Teensy Security: Show Key Location"
+        "command": "teensysecurity.showKeyPath",
+        "title": "Show Key Location",
+        "category": "Teensy Security"
       },
       {
-        "command": "teensysecurity.step1",
-        "title": "Teensy Security: Step 1 - Fuse Write Sketch"
+        "command": "teensysecurity.fuseWriteSketch",
+        "title": "Step 1 - Fuse Write Sketch",
+        "category": "Teensy Security"
       },
       {
-        "command": "teensysecurity.step2",
-        "title": "Teensy Security: Step 2 - Verify Sketch"
+        "command": "teensysecurity.verifySketch",
+        "title": "Step 2 - Verify Sketch",
+        "category": "Teensy Security"
       },
       {
-        "command": "teensysecurity.step3",
-        "title": "Teensy Security: Step 3 - Lock Security Sketch"
+        "command": "teensysecurity.lockSecuritySketch",
+        "title": "Step 3 - Lock Security Sketch",
+        "category": "Teensy Security"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "teensy-4-security",
+          "title": "Teensy 4 Security",
+          "icon": "resources/key-svgrepo-com.svg"
+        }
+      ]
+    },
+    "views": {
+      "teensy-4-security": [
+        {
+          "id": "teensysecurity.setupView",
+          "name": "Teensy 4 Security"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "teensysecurity.setupView",
+        "contents": "1. Encryption Setup\n\nCreate a new encryption key. The key will be written at the path below. Keep this file secret. Anyone who obtains key.pem could decrypt your code. Make backups, as no way exists to recover this file.\n[Generate Key](command:teensysecurity.createKey)\n\n[Click](command:teensysecurity.showKeyPath) to show the location of the key.pem file.\n\nNormal code is stored in a \".HEX\" file an encrypted code is stored in an \".EHEX\" file. Both are created with every compile when key.pem exists at this path.\n\n2. Teensy Hardware Setup\n\nWrite your encryption key to Teensy's permanent fuse memory. After the key written, Teensy can run both normal and encrypted programs.\n[Fuse Write Sketch](command:teensysecurity.fuseWriteSketch)\n\nVerify an encrypted program runs properly.\n[Verify Sketch](command:teensysecurity.verifySketch)\n\nPermanently lock secure mode. Once locked, Teensy will only be able to run programs encrypted by your key, and JTAG access is disabled. This step is required for full security.\n[Lock Security Sketch](command:teensysecurity.lockSecuritySketch)"
       }
     ]
   },

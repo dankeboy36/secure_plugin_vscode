@@ -14,6 +14,5 @@ test-resources/**
 .prettier*
 .github/**
 images/**
-# instead of this hack, consider creating two folders, one for static images (GH readme, etc) and one for runtime images such as the SVG for the future view
 img
-!img/key-svgrepo-com.svg
+Makefile
