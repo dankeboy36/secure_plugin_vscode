@@ -190,7 +190,7 @@ async function createKey(program: string, keyfile: string) {
 function programpath(acontext: ArduinoContext) : string | undefined {
 	var tool = findTool(acontext, "runtime.tools.teensy-tools");
 	if (!tool) {
-		vscode.window.showErrorMessage("Could not find teensy_secure utility.  Please use Boards Manager to install Teensy.");
+		vscode.window.showErrorMessage("Could not find teensy_secure utility.  Please select a Teensy board from the drop-down list or Tools > Port menu.");
 		return undefined;
 	}
 	var filename = 'teensy_secure';
