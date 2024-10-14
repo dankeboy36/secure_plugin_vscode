@@ -23,15 +23,80 @@
 // https://www.svgrepo.com/svg/34405/key
 
 
-import * as vscode from 'vscode';
-import type { Terminal, ExtensionTerminalOptions } from 'vscode';
-import type { ArduinoContext } from 'vscode-arduino-api';
-import * as path from 'path';
+import * as cp from 'node:child_process';
 import * as fs from 'node:fs';
-import * as child_process from 'child_process';
-import { tmpdir, platform } from 'node:os';
+import { platform, tmpdir } from 'node:os';
+import * as path from 'node:path';
+import type { ExtensionTerminalOptions, Terminal } from 'vscode';
+import * as vscode from 'vscode';
+import type { ArduinoContext, BoardDetails } from 'vscode-arduino-api';
 import { activateSetupView } from './setupView';
 
+
+// https://code.visualstudio.com/api/references/when-clause-contexts
+function setWhenContext(contextKey: string, contextValue: unknown) {
+	return vscode.commands.executeCommand('setContext', `teensysecurity.${contextKey}`, contextValue);
+}
+
+// The VS Code API for Arduino IDE supports the FQBN (Fully Qualified Board Name) of the currently selected board in two different ways:
+// - fqbn (string|undefined) -> This is when the user selects a board from the dialog (it does not mean the platform is installed).
+// - boardDetails?.fqbn (string|undefined) -> This is when a board has been selected by the user and the IDE runs the `board details` command. When the platform is not installed, this value will be undefined.
+// Currently, it is not possible to retrieve any information from the CLI via the extension APIs, so extensions cannot check whether a particular platform is installed.
+// Extensions can work around this by listening to both the FQBN (when the user selects a board) and board detail (when the IDE resolves the selected board via the CLI) change events.
+// If the FQBN changes and is "teensy.avr," the extension knows that the currently selected board is a Teensy.
+// If the board details are undefined, the extension can deduce that the platform is not yet installed.
+// This trick works only when the Teensy platform is installed via the "Boards Manager" and the platform name arch is `teensy.avr`. If the FQBN starts with a different vendor-arch pair, the string matching will not work.
+// Such when context values should be provided by vscode-arduino-api as a feature and IDEs should implement it: https://github.com/dankeboy36/vscode-arduino-api/issues/17.
+
+let hasKeyFile = false;
+let availabilityState:
+	'selected' // when selected by user
+	| 'installed' // when selected by user + board details is available
+	| undefined  // rest (loading, other board is selected, etc.)
+	= undefined;
+let selectedBoardFqbn: string | undefined;
+
+function activateWhenContext(arduinoContext: ArduinoContext): vscode.Disposable[] {
+	updateTeensySelectedWhenContext(arduinoContext.fqbn);
+	updateTeensyInstalledWhenContext(arduinoContext.boardDetails);
+	getKeyPath(arduinoContext); // will trigger when context update
+	return [
+		arduinoContext.onDidChange('fqbn')(updateTeensySelectedWhenContext),
+		arduinoContext.onDidChange('boardDetails')(updateTeensyInstalledWhenContext)
+	];
+}
+
+function updateTeensySelectedWhenContext(fqbn: string | undefined) {
+	selectedBoardFqbn = fqbn;
+	const isTeensy = selectedBoardFqbn?.startsWith('teensy.avr');
+	if (availabilityState === 'installed' && isTeensy) {
+		return;
+	}
+	availabilityState = isTeensy ? 'selected' : undefined;
+	return setWhenContext('state', availabilityState);
+}
+
+function updateTeensyInstalledWhenContext(details: BoardDetails | undefined) {
+	// board details change events always come after an FQBN change
+	if (availabilityState === 'selected' && details?.fqbn?.startsWith('teensy.avr')) {
+		availabilityState = 'installed';
+		return setWhenContext('state', availabilityState);
+	}
+}
+
+function getKeyPath(arduinoContext: ArduinoContext): string | undefined {
+	const program = programpath(arduinoContext);
+	if (!program) { return; }
+	const keyPath = keyfilename(program);
+	updateKeyFilePathContext(keyPath); // whenever the keypath is queried, update the when context
+	return keyPath;
+}
+
+function updateKeyFilePathContext(keyPath: string | undefined) {
+	// Although it is recommended not to store the .pem file location, this logic does not care the value, only it's existence.
+	hasKeyFile = !!keyPath;
+	return setWhenContext('hasKeyFile', hasKeyFile);
+}
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -46,6 +111,7 @@ export function activate(context: vscode.ExtensionContext) {
 	activateSetupView(context);
 
 	context.subscriptions.push(
+		...activateWhenContext(acontext),
 		vscode.commands.registerCommand('teensysecurity.createKey', () => {
 			var program = programpath(acontext);
 			if (!program) {return;}
@@ -125,7 +191,7 @@ function createTempFolder(sketchname: string) : string {
 
 function makeCode(program: string, keyfile: string, operation: string, pathname: string) : boolean {
 	// https://stackoverflow.com/questions/14332721
-	var child = child_process.spawnSync(program, [operation, keyfile]);
+	var child = cp.spawnSync(program, [operation, keyfile]);
 	if (child.error) {return false;}
 	if (child.status != 0) {return false;}
 	if (child.stdout.length <= 0) {return false;}
@@ -169,7 +235,7 @@ async function createKey(program: string, keyfile: string) {
 	term.show();
 
 	// start teensy_secure running with keygen
-	var child = child_process.spawn(program, ['keygen', keyfile]);
+	var child = cp.spawn(program, ['keygen', keyfile]);
 
 	// as stdout and stderr arrive, send to the terminal
 	child.stdout.on('data', function(data:string) {
@@ -205,7 +271,7 @@ function programpath(acontext: ArduinoContext) : string | undefined {
 //   key.pem files, which file teensy_secure uses may change.
 function keyfilename(program: string) : string | undefined {
 	// https://stackoverflow.com/questions/14332721
-	var child = child_process.spawnSync(program, ['keyfile']);
+	var child = cp.spawnSync(program, ['keyfile']);
 	if (child.error) {return undefined;}
 	if (child.status != 0) {
 		vscode.window.showErrorMessage("Found old version of teensy_secure utility.  Please use Boards Manager to install Teensy 1.60.0 or later.");

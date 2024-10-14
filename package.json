@@ -65,7 +65,18 @@
     "viewsWelcome": [
       {
         "view": "teensysecurity.setupView",
-        "contents": "1. Encryption Setup\n\nCreate a new encryption key. The key will be written at the path below. Keep this file secret. Anyone who obtains key.pem could decrypt your code. Make backups, as no way exists to recover this file.\n[Generate Key](command:teensysecurity.createKey)\n\n[Click](command:teensysecurity.showKeyPath) to show the location of the key.pem file.\n\nNormal code is stored in a \".HEX\" file an encrypted code is stored in an \".EHEX\" file. Both are created with every compile when key.pem exists at this path.\n\n2. Teensy Hardware Setup\n\nWrite your encryption key to Teensy's permanent fuse memory. After the key written, Teensy can run both normal and encrypted programs.\n[Fuse Write Sketch](command:teensysecurity.fuseWriteSketch)\n\nVerify an encrypted program runs properly.\n[Verify Sketch](command:teensysecurity.verifySketch)\n\nPermanently lock secure mode. Once locked, Teensy will only be able to run programs encrypted by your key, and JTAG access is disabled. This step is required for full security.\n[Lock Security Sketch](command:teensysecurity.lockSecuritySketch)"
+        "contents": "1. Encryption Setup\n\nCreate a new encryption key. The key will be written at the path below. Keep this file secret. Anyone who obtains key.pem could decrypt your code. Make backups, as no way exists to recover this file.\n[Generate Key](command:teensysecurity.createKey)",
+        "enablement": "teensysecurity.state == 'installed'"
+      },
+      {
+        "view": "teensysecurity.setupView",
+        "contents": "[Click](command:teensysecurity.showKeyPath) to show the location of the key.pem file.\n\nNormal code is stored in a \".HEX\" file an encrypted code is stored in an \".EHEX\" file. Both are created with every compile when key.pem exists at this path.",
+        "enablement": "true"
+      },
+      {
+        "view": "teensysecurity.setupView",
+        "contents": "2. Teensy Hardware Setup\n\nWrite your encryption key to Teensy's permanent fuse memory. After the key written, Teensy can run both normal and encrypted programs.\n[Fuse Write Sketch](command:teensysecurity.fuseWriteSketch)\n\nVerify an encrypted program runs properly.\n[Verify Sketch](command:teensysecurity.verifySketch)\n\nPermanently lock secure mode. Once locked, Teensy will only be able to run programs encrypted by your key, and JTAG access is disabled. This step is required for full security.\n[Lock Security Sketch](command:teensysecurity.lockSecuritySketch)",
+        "enablement": "teensysecurity.state == 'installed' && teensysecurity.hasKeyFile"
       }
     ]
   },
