@@ -1,6 +1,6 @@
 out
 dist
 .vscode-test/
-
+*.vsix
 *.swp
 node_modules
