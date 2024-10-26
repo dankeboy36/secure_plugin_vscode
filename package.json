@@ -2,7 +2,7 @@
   "name": "teensysecurity",
   "displayName": "TeensySecurity",
   "description": "Teensy Security",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "engines": {
     "vscode": "^1.93.0"
   },
@@ -75,7 +75,7 @@
       },
       {
         "view": "teensysecurity.setupView",
-        "contents": "2. Teensy Hardware Setup\n\nWrite your encryption key to Teensy's permanent fuse memory. After the key written, Teensy can run both normal and encrypted programs.\n[Fuse Write Sketch](command:teensysecurity.fuseWriteSketch)\n\nVerify an encrypted program runs properly.\n[Verify Sketch](command:teensysecurity.verifySketch)\n\nPermanently lock secure mode. Once locked, Teensy will only be able to run programs encrypted by your key, and JTAG access is disabled. This step is required for full security.\n[Lock Security Sketch](command:teensysecurity.lockSecuritySketch)",
+        "contents": "2. Teensy Hardware Setup\n\nWrite your encryption key to Teensy's permanent fuse memory. After the key written, Teensy can run both normal and encrypted programs.\n[Fuse Write](command:teensysecurity.fuseWriteSketch)\n\nVerify an encrypted program runs properly.\n[Verify Sketch](command:teensysecurity.verifySketch)\n\nPermanently lock secure mode. Once locked, Teensy will only be able to run programs encrypted by your key, and JTAG access is disabled. This step is required for full security.\n[Lock Security](command:teensysecurity.lockSecuritySketch)",
         "enablement": "teensysecurity.state == installed && teensysecurity.hasKeyFile"
       }
     ]

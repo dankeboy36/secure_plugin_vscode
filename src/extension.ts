@@ -265,7 +265,7 @@ function programPath(boardDetails: BoardDetails | undefined, showsErrorMessage =
 	var tool = findTool(boardDetails, "runtime.tools.teensy-tools");
 	if (!tool) {
 		if (showsErrorMessage) {
-			vscode.window.showErrorMessage("Could not find teensy_secure utility.  Please use Boards Manager to install Teensy.");
+			vscode.window.showErrorMessage("Could not find teensy_secure utility.  Please select a Teensy board from the drop-down list or Tools > Port menu.");
 		}
 		return undefined;
 	}
