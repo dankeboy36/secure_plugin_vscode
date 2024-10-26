@@ -43,12 +43,11 @@ function setWhenContext(contextKey: string, contextValue: unknown) {
 // - boardDetails?.fqbn (string|undefined) -> This is when a board has been selected by the user and the IDE runs the `board details` command. When the platform is not installed, this value will be undefined.
 // Currently, it is not possible to retrieve any information from the CLI via the extension APIs, so extensions cannot check whether a particular platform is installed.
 // Extensions can work around this by listening to both the FQBN (when the user selects a board) and board detail (when the IDE resolves the selected board via the CLI) change events.
-// If the FQBN changes and is "teensy.avr," the extension knows that the currently selected board is a Teensy.
+// If the FQBN changes and is "teensy:avr," the extension knows that the currently selected board is a Teensy.
 // If the board details are undefined, the extension can deduce that the platform is not yet installed.
-// This trick works only when the Teensy platform is installed via the "Boards Manager" and the platform name arch is `teensy.avr`. If the FQBN starts with a different vendor-arch pair, the string matching will not work.
+// This trick works only when the Teensy platform is installed via the "Boards Manager" and the platform name arch is `teensy:avr`. If the FQBN starts with a different vendor-arch pair, the string matching will not work.
 // Such when context values should be provided by vscode-arduino-api as a feature and IDEs should implement it: https://github.com/dankeboy36/vscode-arduino-api/issues/17.
 
-let hasKeyFile = false;
 let availabilityState:
 	'selected' // when selected by user
 	| 'installed' // when selected by user + board details is available
@@ -59,16 +58,17 @@ let selectedBoardFqbn: string | undefined;
 function activateWhenContext(arduinoContext: ArduinoContext): vscode.Disposable[] {
 	updateTeensySelectedWhenContext(arduinoContext.fqbn);
 	updateTeensyInstalledWhenContext(arduinoContext.boardDetails);
-	getKeyPath(arduinoContext); // will trigger when context update
+	updateHasKeyFileWhenContext(arduinoContext.boardDetails);
 	return [
 		arduinoContext.onDidChange('fqbn')(updateTeensySelectedWhenContext),
-		arduinoContext.onDidChange('boardDetails')(updateTeensyInstalledWhenContext)
+		arduinoContext.onDidChange('boardDetails')(updateTeensyInstalledWhenContext),
+		arduinoContext.onDidChange('boardDetails')(updateHasKeyFileWhenContext),
 	];
 }
 
 function updateTeensySelectedWhenContext(fqbn: string | undefined) {
 	selectedBoardFqbn = fqbn;
-	const isTeensy = selectedBoardFqbn?.startsWith('teensy.avr');
+	const isTeensy = selectedBoardFqbn?.startsWith('teensy:avr');
 	if (availabilityState === 'installed' && isTeensy) {
 		return;
 	}
@@ -78,32 +78,31 @@ function updateTeensySelectedWhenContext(fqbn: string | undefined) {
 
 function updateTeensyInstalledWhenContext(details: BoardDetails | undefined) {
 	// board details change events always come after an FQBN change
-	if (availabilityState === 'selected' && details?.fqbn?.startsWith('teensy.avr')) {
+	if (availabilityState === 'selected' && details?.fqbn?.startsWith('teensy:avr')) {
 		availabilityState = 'installed';
 		return setWhenContext('state', availabilityState);
 	}
 }
 
-function getKeyPath(arduinoContext: ArduinoContext): string | undefined {
-	const program = programpath(arduinoContext);
-	if (!program) { return; }
-	const keyPath = keyfilename(program);
-	updateKeyFilePathContext(keyPath); // whenever the keypath is queried, update the when context
-	return keyPath;
-}
-
-function updateKeyFilePathContext(keyPath: string | undefined) {
-	// Although it is recommended not to store the .pem file location, this logic does not care the value, only it's existence.
-	hasKeyFile = !!keyPath;
-	return setWhenContext('hasKeyFile', hasKeyFile);
+function updateHasKeyFileWhenContext(boardDetails: BoardDetails | undefined) {
+	if (boardDetails?.fqbn.startsWith('teensy:avr')) {
+		const program = programPath(boardDetails, false);
+		if (program) {
+			const keyPath = keyFilename(program);
+			if (keyPath) {
+				setWhenContext('hasKeyFile', fs.existsSync(keyPath));
+				return;
+			}
+		}
+	}
+	setWhenContext('hasKeyFile', undefined);
 }
 
 export function activate(context: vscode.ExtensionContext) {
-
-	const acontext: ArduinoContext = vscode.extensions.getExtension(
+	const arduinoContext: ArduinoContext = vscode.extensions.getExtension(
 		'dankeboy36.vscode-arduino-api'
 	)?.exports;
-	if (!acontext) {
+	if (!arduinoContext) {
 		console.log('teensysecurity Failed to load the Arduino API');
 		return;
 	}
@@ -111,31 +110,40 @@ export function activate(context: vscode.ExtensionContext) {
 	activateSetupView(context);
 
 	context.subscriptions.push(
-		...activateWhenContext(acontext),
+		...activateWhenContext(arduinoContext),
 		vscode.commands.registerCommand('teensysecurity.createKey', () => {
-			var program = programpath(acontext);
-			if (!program) {return;}
-			var keyfile = keyfilename(program);
-			if (!keyfile) {return;}
+			var program = programPath(arduinoContext.boardDetails);
+			if (!program) { return; }
+			var keyfile = keyFilename(program);
+			if (!keyfile) { return; }
 			createKey(program, keyfile);
+			setWhenContext('hasKeyFile', true); // trigger a when context update after the command execution
 		})
 	);
 	context.subscriptions.push(
-		vscode.commands.registerCommand('teensysecurity.showKeyPath', () => {
-			var program = programpath(acontext);
-			if (!program) {return;}
-			var keyfile = keyfilename(program);
-			if (!keyfile) {return;}
-			vscode.window.showInformationMessage('key.pem location: ' + keyfile);
+		vscode.commands.registerCommand('teensysecurity.showKeyPath', async () => {
+			var program = programPath(arduinoContext.boardDetails);
+			if (!program) { return; }
+			var keyfile = keyFilename(program);
+			if (!keyfile) { return; }
+			const openKeyFileAction = 'Open Key File';
+			const actions = [];
+			if (fs.existsSync(keyfile)) {
+				actions.push(openKeyFileAction);
+			}
+			const action = await vscode.window.showInformationMessage('key.pem location: ' + keyfile, ...actions);
+			if (action === openKeyFileAction) {
+				vscode.commands.executeCommand('vscode.open', vscode.Uri.file(keyfile));
+			}
 		})
 	);
 	context.subscriptions.push(
 		vscode.commands.registerCommand('teensysecurity.fuseWriteSketch', async () => {
-			var program = programpath(acontext);
-			if (!program) {return;}
-			var keyfile = keyfilename(program);
-			if (!keyfile) {return;}
-			if (!keyfileexists(keyfile)) {return;}
+			var program = programPath(arduinoContext.boardDetails);
+			if (!program) { return; }
+			var keyfile = keyFilename(program);
+			if (!keyfile) { return; }
+			if (!keyfileexists(keyfile)) { return; }
 			console.log('teensysecurity.fuseWriteSketch (Fuse Write Sketch) callback');
 			var mydir = createTempFolder("FuseWrite");
 			makeCode(program, keyfile, "fuseino", path.join(mydir, "FuseWrite.ino"));
@@ -146,11 +154,11 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('teensysecurity.verifySketch', async () => {
 			console.log('teensysecurity.verifySketch (Verify Sketch) callback');
-			var program = programpath(acontext);
-			if (!program) {return;}
-			var keyfile = keyfilename(program);
-			if (!keyfile) {return;}
-			if (!keyfileexists(keyfile)) {return;}
+			var program = programPath(arduinoContext.boardDetails);
+			if (!program) { return; }
+			var keyfile = keyFilename(program);
+			if (!keyfile) { return; }
+			if (!keyfileexists(keyfile)) { return; }
 			var mydir = createTempFolder("VerifySecure");
 			makeCode(program, keyfile, "verifyino", path.join(mydir, "VerifySecure.ino"));
 			openSketch(mydir);
@@ -159,11 +167,11 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('teensysecurity.lockSecuritySketch', async () => {
 			console.log('teensysecurity.lockSecuritySketch (Lock Security Sketch) callback');
-			var program = programpath(acontext);
-			if (!program) {return;}
-			var keyfile = keyfilename(program);
-			if (!keyfile) {return;}
-			if (!keyfileexists(keyfile)) {return;}
+			var program = programPath(arduinoContext.boardDetails);
+			if (!program) { return; }
+			var keyfile = keyFilename(program);
+			if (!keyfile) { return; }
+			if (!keyfileexists(keyfile)) { return; }
 			var mydir = createTempFolder("LockSecureMode");
 			makeCode(program, keyfile, "lockino", path.join(mydir, "LockSecureMode.ino"));
 			openSketch(mydir);
@@ -181,20 +189,20 @@ export function activate(context: vscode.ExtensionContext) {
 	console.log('extension "teensysecurity" is now active!');
 }
 
-function createTempFolder(sketchname: string) : string {
+function createTempFolder(sketchname: string): string {
 	var mytmpdir = fs.mkdtempSync(path.join(tmpdir(), 'teensysecure-'));
-	var mydir:string = path.join(mytmpdir, sketchname);
+	var mydir: string = path.join(mytmpdir, sketchname);
 	console.log("temporary sketch directory: " + mydir);
 	fs.mkdirSync(mydir);
 	return mydir;
 }
 
-function makeCode(program: string, keyfile: string, operation: string, pathname: string) : boolean {
+function makeCode(program: string, keyfile: string, operation: string, pathname: string): boolean {
 	// https://stackoverflow.com/questions/14332721
 	var child = cp.spawnSync(program, [operation, keyfile]);
-	if (child.error) {return false;}
-	if (child.status != 0) {return false;}
-	if (child.stdout.length <= 0) {return false;}
+	if (child.error) { return false; }
+	if (child.status !== 0) { return false; }
+	if (child.stdout.length <= 0) { return false; }
 	fs.writeFileSync(pathname, child.stdout);
 	return true;
 }
@@ -203,7 +211,7 @@ async function openSketch(sketchpath: string) {
 	// Thanks to dankeboy36
 	// https://github.com/dankeboy36/vscode-arduino-api/discussions/16
 	const uri = vscode.Uri.file(sketchpath);
-	vscode.commands.executeCommand('vscode.openFolder', uri , { forceNewWindow: true });
+	vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });
 }
 
 async function createKey(program: string, keyfile: string) {
@@ -211,8 +219,8 @@ async function createKey(program: string, keyfile: string) {
 	// https://code.visualstudio.com/api/references/vscode-api#EventEmitter&lt;T&gt;
 	var wevent = new vscode.EventEmitter<string>();
 	var isopen = false;
-	var buffer:string = '';
-	function tprint(s: string) : void {
+	var buffer: string = '';
+	function tprint(s: string): void {
 		var s2 = String(s).replace(/\n/g, "\r\n");
 		if (isopen) {
 			wevent.fire(s2);
@@ -223,7 +231,7 @@ async function createKey(program: string, keyfile: string) {
 
 	// open a terminal which will receive the keygen output messages
 	// https://code.visualstudio.com/api/references/vscode-api#ExtensionTerminalOptions
-	const opt : ExtensionTerminalOptions = {
+	const opt: ExtensionTerminalOptions = {
 		name: "New Key",
 		pty: {
 			onDidWrite: wevent.event,
@@ -231,17 +239,17 @@ async function createKey(program: string, keyfile: string) {
 			close: () => { isopen = false; buffer = ''; },
 		}
 	};
-	const term : Terminal = (<any>vscode.window).createTerminal(opt);
+	const term: Terminal = (<any>vscode.window).createTerminal(opt);
 	term.show();
 
 	// start teensy_secure running with keygen
 	var child = cp.spawn(program, ['keygen', keyfile]);
 
 	// as stdout and stderr arrive, send to the terminal
-	child.stdout.on('data', function(data:string) {
+	child.stdout.on('data', function (data: string) {
 		tprint(data);
 	});
-	child.stderr.on('data', function(data:string) {
+	child.stderr.on('data', function (data: string) {
 		tprint(data); // TODO: red text like esp-exception decoder
 	});
 
@@ -253,14 +261,16 @@ async function createKey(program: string, keyfile: string) {
 //   calling functions should NOT store this, only use if for immediate needs
 //   if Boards Manager is used to upgrade, downgrade or uninstall Teensy,
 //   this pathname can be expected to change or even become undefined
-function programpath(acontext: ArduinoContext) : string | undefined {
-	var tool = findTool(acontext, "runtime.tools.teensy-tools");
+function programPath(boardDetails: BoardDetails | undefined, showsErrorMessage = true): string | undefined {
+	var tool = findTool(boardDetails, "runtime.tools.teensy-tools");
 	if (!tool) {
-		vscode.window.showErrorMessage("Could not find teensy_secure utility.  Please use Boards Manager to install Teensy.");
+		if (showsErrorMessage) {
+			vscode.window.showErrorMessage("Could not find teensy_secure utility.  Please use Boards Manager to install Teensy.");
+		}
 		return undefined;
 	}
 	var filename = 'teensy_secure';
-	if (platform() === 'win32') {filename += '.exe';}
+	if (platform() === 'win32') { filename += '.exe'; }
 	return path.join(tool, filename);
 }
 
@@ -269,43 +279,43 @@ function programpath(acontext: ArduinoContext) : string | undefined {
 //   teensy_secure can look for key.pem in multiple locations and choose which
 //   to use based on its internal rules.  If the user moves or deletes their
 //   key.pem files, which file teensy_secure uses may change.
-function keyfilename(program: string) : string | undefined {
+function keyFilename(program: string): string | undefined {
 	// https://stackoverflow.com/questions/14332721
 	var child = cp.spawnSync(program, ['keyfile']);
-	if (child.error) {return undefined;}
-	if (child.status != 0) {
+	if (child.error) { return undefined; }
+	if (child.status !== 0) {
 		vscode.window.showErrorMessage("Found old version of teensy_secure utility.  Please use Boards Manager to install Teensy 1.60.0 or later.");
 		return undefined;
 	}
-	if (child.stdout.length <= 0) {return undefined;}
-	var out:string = child.stdout.toString();
-	var out2:string = out.replace(/\s+$/gm,''); // remove trailing newline
+	if (child.stdout.length <= 0) { return undefined; }
+	var out: string = child.stdout.toString();
+	var out2: string = out.replace(/\s+$/gm, ''); // remove trailing newline
 	return out2;
 }
 
-function keyfileexists(keyfile: string) : boolean {
-	if (fs.existsSync(keyfile)) {return true;}
+function keyfileexists(keyfile: string): boolean {
+	if (fs.existsSync(keyfile)) { return true; }
 	vscode.window.showErrorMessage('This command requires a key.pem file (' + keyfile + ').  Please use "Teensy Security: Generate Key" to create your key.pem file.');
 	return false;
 }
 
 // from arduino-littlefs-upload
-function findTool(ctx: ArduinoContext, match : string) : string | undefined {
-    var found = false;
-    var ret = undefined;
-    if (ctx.boardDetails !== undefined) {
-        Object.keys(ctx.boardDetails.buildProperties).forEach( (elem) => {
-            if (elem.startsWith(match) && !found && (ctx.boardDetails?.buildProperties[elem] !== undefined)) {
-                ret = ctx.boardDetails.buildProperties[elem];
-                found = true;
-            }
-        });
-    }
-    return ret;
+function findTool(boardDetails: BoardDetails | undefined, match: string): string | undefined {
+	var found = false;
+	var ret = undefined;
+	if (boardDetails !== undefined) {
+		Object.keys(boardDetails.buildProperties).forEach((elem) => {
+			if (elem.startsWith(match) && !found && (boardDetails?.buildProperties[elem] !== undefined)) {
+				ret = boardDetails.buildProperties[elem];
+				found = true;
+			}
+		});
+	}
+	return ret;
 }
 
 
 
 // This method is called when your extension is deactivated
 //  TODO: should keep a list of all files create and delete them here
-export function deactivate() {}
+export function deactivate() { }
